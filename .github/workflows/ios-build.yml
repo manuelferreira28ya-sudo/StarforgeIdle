@@ -49,8 +49,31 @@ jobs:
           cd build/DerivedData/Build/Products/Debug-iphonesimulator
           zip -r StarforgeIdle-simulator.zip StarforgeIdle.app
 
+      - name: Launch app and capture simulator screenshot
+        run: |
+          set -euo pipefail
+          mkdir -p build/screenshots
+
+          RUNTIME_ID=$(xcrun simctl list runtimes --json | python3 -c 'import json, sys; runtimes = [runtime for runtime in json.load(sys.stdin)["runtimes"] if runtime.get("isAvailable") and runtime.get("identifier", "").startswith("com.apple.CoreSimulator.SimRuntime.iOS-")]; runtimes.sort(key=lambda runtime: [int(part) for part in runtime["version"].split(".")], reverse=True); print(runtimes[0]["identifier"])')
+          DEVICE_TYPE=$(xcrun simctl list devicetypes --json | python3 -c 'import json, sys; devices = {device["name"]: device["identifier"] for device in json.load(sys.stdin)["devicetypes"] if device["name"].startswith("iPhone")}; preferred = ["iPhone 16", "iPhone 15", "iPhone 14", "iPhone 13"]; print(next((devices[name] for name in preferred if name in devices), next(iter(devices.values()))))')
+          SIM_UDID=$(xcrun simctl create "StarforgeIdle-CI" "$DEVICE_TYPE" "$RUNTIME_ID")
+
+          trap 'xcrun simctl shutdown "$SIM_UDID" >/dev/null 2>&1 || true; xcrun simctl delete "$SIM_UDID" >/dev/null 2>&1 || true' EXIT
+          xcrun simctl boot "$SIM_UDID"
+          xcrun simctl bootstatus "$SIM_UDID" -b
+          xcrun simctl install "$SIM_UDID" build/DerivedData/Build/Products/Debug-iphonesimulator/StarforgeIdle.app
+          xcrun simctl launch "$SIM_UDID" com.manuelferreira.starforgeidle
+          sleep 8
+          xcrun simctl io "$SIM_UDID" screenshot build/screenshots/starforge-idle-forge.png
+
       - name: Upload simulator app artifact
         uses: actions/upload-artifact@v7
         with:
           name: StarforgeIdle-simulator-app
           path: build/DerivedData/Build/Products/Debug-iphonesimulator/StarforgeIdle-simulator.zip
+
+      - name: Upload simulator screenshots
+        uses: actions/upload-artifact@v7
+        with:
+          name: StarforgeIdle-simulator-screenshots
+          path: build/screenshots
