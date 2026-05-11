@@ -50,7 +50,7 @@ jobs:
           zip -r StarforgeIdle-simulator.zip StarforgeIdle.app
 
       - name: Upload simulator app artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: StarforgeIdle-simulator-app
           path: build/DerivedData/Build/Products/Debug-iphonesimulator/StarforgeIdle-simulator.zip
