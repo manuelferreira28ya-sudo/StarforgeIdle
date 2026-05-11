@@ -32,7 +32,7 @@ struct ContentView: View {
                     Label("Supply", systemImage: "calendar")
                 }
         }
-        .tint(.ionTeal)
+        .tint(Color.ionTeal)
         .preferredColorScheme(.dark)
         .onAppear {
             store.startSession()

@@ -237,7 +237,7 @@ struct SummaryHeader: View {
                         .foregroundStyle(.white.opacity(0.7))
                 }
                 .font(.headline.weight(.bold))
-                .foregroundStyle(.flareGold)
+                .foregroundStyle(Color.flareGold)
             }
 
             HStack(spacing: 10) {
@@ -258,7 +258,7 @@ struct StatPill: View {
     var body: some View {
         HStack(spacing: 8) {
             Image(systemName: symbolName)
-                .foregroundStyle(.ionTeal)
+                .foregroundStyle(Color.ionTeal)
             VStack(alignment: .leading, spacing: 1) {
                 Text(value)
                     .font(.headline.weight(.bold))
@@ -283,7 +283,7 @@ struct BannerView: View {
     var body: some View {
         HStack(spacing: 12) {
             Image(systemName: "tray.full.fill")
-                .foregroundStyle(.flareGold)
+                .foregroundStyle(Color.flareGold)
             Text(message)
                 .font(.subheadline.weight(.semibold))
                 .lineLimit(2)
@@ -445,7 +445,7 @@ struct FeaturedGoalPanel: View {
                         .foregroundStyle(.white.opacity(0.68))
                     Text(GameEngine.rewardDescription(goal.reward))
                         .font(.caption2.weight(.black))
-                        .foregroundStyle(.flareGold)
+                        .foregroundStyle(Color.flareGold)
                 }
 
                 Spacer()
@@ -461,7 +461,7 @@ struct FeaturedGoalPanel: View {
             }
 
             ProgressView(value: progress.fraction)
-                .tint(canClaim ? .ionTeal : .flareGold)
+                .tint(canClaim ? Color.ionTeal : Color.flareGold)
 
             Text("\(progress.current.compactGameValue) / \(progress.target.compactGameValue)")
                 .font(.caption2.weight(.bold))
@@ -492,7 +492,7 @@ struct GeneratorRow: View {
                     Spacer()
                     Text("x\(count)")
                         .font(.subheadline.weight(.heavy))
-                        .foregroundStyle(.flareGold)
+                        .foregroundStyle(Color.flareGold)
                 }
 
                 Text(unlocked ? definition.role : "Unlock at \(definition.unlockAtTotalEarned.compactGameValue) total")
@@ -501,7 +501,7 @@ struct GeneratorRow: View {
 
                 Text("+\((definition.baseOutput * Double(max(count, 1))).compactGameValue)/sec base")
                     .font(.caption2.weight(.semibold))
-                    .foregroundStyle(.ionTeal)
+                    .foregroundStyle(Color.ionTeal)
 
                 if let nextMilestone {
                     Text("Milestone at x\(nextMilestone)")
@@ -510,7 +510,7 @@ struct GeneratorRow: View {
                 } else if count >= GameBalance.milestoneCounts.last ?? 0 {
                     Text("All milestones active")
                         .font(.caption2.weight(.bold))
-                        .foregroundStyle(.flareGold)
+                        .foregroundStyle(Color.flareGold)
                 }
             }
 
@@ -623,7 +623,7 @@ struct UpgradeRow: View {
             }
 
             ProgressView(value: Double(level), total: Double(definition.maxLevel))
-                .tint(.ionTeal)
+                .tint(Color.ionTeal)
 
             Text("Level \(level)/\(definition.maxLevel)")
                 .font(.caption2.weight(.bold))
@@ -655,7 +655,7 @@ struct GoalRow: View {
                         .foregroundStyle(.white.opacity(0.7))
                     Text(GameEngine.rewardDescription(goal.reward))
                         .font(.caption2.weight(.black))
-                        .foregroundStyle(.flareGold)
+                        .foregroundStyle(Color.flareGold)
                 }
 
                 Spacer()
@@ -671,7 +671,7 @@ struct GoalRow: View {
             }
 
             ProgressView(value: progress.fraction)
-                .tint(claimed ? .ionTeal : .flareGold)
+                .tint(claimed ? Color.ionTeal : Color.flareGold)
 
             Text("\(progress.current.compactGameValue) / \(progress.target.compactGameValue)")
                 .font(.caption2.weight(.bold))
@@ -692,7 +692,7 @@ struct CrewCard: View {
                 Spacer()
                 Text(isUnlocked ? crew.rarity : "Locked")
                     .font(.caption.weight(.black))
-                    .foregroundStyle(isUnlocked ? .ionTeal : .white.opacity(0.45))
+                    .foregroundStyle(isUnlocked ? Color.ionTeal : Color.white.opacity(0.45))
             }
 
             VStack(alignment: .leading, spacing: 4) {
@@ -703,7 +703,7 @@ struct CrewCard: View {
                     .foregroundStyle(.white.opacity(0.66))
                 Text("+\(Int(crew.bonusPercentage * 100))% all output")
                     .font(.caption2.weight(.black))
-                    .foregroundStyle(.flareGold)
+                    .foregroundStyle(Color.flareGold)
             }
         }
         .frame(maxWidth: .infinity, minHeight: 148, alignment: .topLeading)
@@ -741,7 +741,7 @@ struct PrestigePanel: View {
             }
 
             ProgressView(value: progress)
-                .tint(.cometPink)
+                .tint(Color.cometPink)
 
             Text("\(state.totalStardustEarned.compactGameValue) / \(GameBalance.prestigeThreshold.compactGameValue)")
                 .font(.caption2.weight(.bold))
