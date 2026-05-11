@@ -1,0 +1,57 @@
+name: iOS Build and Core Tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  core-tests:
+    name: Core Gameplay Tests
+    runs-on: macos-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Show Swift version
+        run: swift --version
+
+      - name: Run gameplay core tests
+        run: swift test
+
+  ios-simulator-build:
+    name: iOS Simulator Build
+    runs-on: macos-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Show Xcode version
+        run: xcodebuild -version
+
+      - name: Build simulator app
+        run: |
+          xcodebuild \
+            -project StarforgeIdle.xcodeproj \
+            -scheme StarforgeIdle \
+            -configuration Debug \
+            -destination 'generic/platform=iOS Simulator' \
+            -derivedDataPath build/DerivedData \
+            CODE_SIGNING_ALLOWED=NO \
+            clean build
+
+      - name: Package simulator app
+        run: |
+          cd build/DerivedData/Build/Products/Debug-iphonesimulator
+          zip -r StarforgeIdle-simulator.zip StarforgeIdle.app
+
+      - name: Upload simulator app artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: StarforgeIdle-simulator-app
+          path: build/DerivedData/Build/Products/Debug-iphonesimulator/StarforgeIdle-simulator.zip
+

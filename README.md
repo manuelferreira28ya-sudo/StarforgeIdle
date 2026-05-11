@@ -32,3 +32,5 @@ The economy core can be tested on Windows after installing Swift and Visual Stud
 ## App Store
 
 Submission notes, metadata drafts, privacy/support drafts, screenshot guidance, and final Mac validation commands live in `AppStore/APP_STORE_READINESS.md` and `fastlane/metadata/en-US`.
+
+No Mac available? Use the GitHub Actions workflow and browser-simulator path in `AppStore/NO_MAC_TESTING.md`.
