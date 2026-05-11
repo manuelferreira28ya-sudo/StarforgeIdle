@@ -1,0 +1,64 @@
+workflows:
+  ios-simulator-validation:
+    name: iOS Simulator Validation
+    max_build_duration: 120
+    instance_type: mac_mini_m2
+    environment:
+      xcode: latest
+      vars:
+        XCODE_PROJECT: "StarforgeIdle.xcodeproj"
+        XCODE_SCHEME: "StarforgeIdle"
+        BUNDLE_ID: "com.manuelferreira.starforgeidle"
+    scripts:
+      - name: Show tool versions
+        script: |
+          set -euo pipefail
+          xcodebuild -version
+          swift --version
+
+      - name: Run core gameplay tests
+        script: |
+          set -euo pipefail
+          swift test
+
+      - name: Build unsigned simulator app
+        script: |
+          set -euo pipefail
+          xcodebuild build \
+            -project "$XCODE_PROJECT" \
+            -scheme "$XCODE_SCHEME" \
+            -configuration Debug \
+            -sdk iphonesimulator \
+            -destination 'generic/platform=iOS Simulator' \
+            -derivedDataPath build/DerivedData \
+            CODE_SIGN_IDENTITY="" \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGNING_ALLOWED=NO
+
+      - name: Package simulator app
+        script: |
+          set -euo pipefail
+          cd build/DerivedData/Build/Products/Debug-iphonesimulator
+          zip -r StarforgeIdle-simulator.zip StarforgeIdle.app
+
+      - name: Launch app and capture simulator screenshot
+        script: |
+          set -euo pipefail
+          mkdir -p build/screenshots
+
+          RUNTIME_ID=$(xcrun simctl list runtimes --json | python3 -c 'import json, sys; runtimes = [runtime for runtime in json.load(sys.stdin)["runtimes"] if runtime.get("isAvailable") and runtime.get("identifier", "").startswith("com.apple.CoreSimulator.SimRuntime.iOS-")]; runtimes.sort(key=lambda runtime: [int(part) for part in runtime["version"].split(".")], reverse=True); print(runtimes[0]["identifier"])')
+          DEVICE_TYPE=$(xcrun simctl list devicetypes --json | python3 -c 'import json, sys; devices = {device["name"]: device["identifier"] for device in json.load(sys.stdin)["devicetypes"] if device["name"].startswith("iPhone")}; preferred = ["iPhone 16", "iPhone 15", "iPhone 14", "iPhone 13"]; print(next((devices[name] for name in preferred if name in devices), next(iter(devices.values()))))')
+          SIM_UDID=$(xcrun simctl create "StarforgeIdle-Codemagic" "$DEVICE_TYPE" "$RUNTIME_ID")
+
+          trap 'xcrun simctl shutdown "$SIM_UDID" >/dev/null 2>&1 || true; xcrun simctl delete "$SIM_UDID" >/dev/null 2>&1 || true' EXIT
+          xcrun simctl boot "$SIM_UDID"
+          xcrun simctl bootstatus "$SIM_UDID" -b
+          xcrun simctl install "$SIM_UDID" build/DerivedData/Build/Products/Debug-iphonesimulator/StarforgeIdle.app
+          xcrun simctl launch "$SIM_UDID" "$BUNDLE_ID"
+          sleep 8
+          xcrun simctl io "$SIM_UDID" screenshot build/screenshots/starforge-idle-forge.png
+
+    artifacts:
+      - build/DerivedData/Build/Products/Debug-iphonesimulator/StarforgeIdle-simulator.zip
+      - build/screenshots/*.png
+      - build/DerivedData/Logs/**/*.xcresult
