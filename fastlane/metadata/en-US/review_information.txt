@@ -1,0 +1,12 @@
+Starforge Idle is a local-only casual idle game. It has no ads, no in-app purchases, no account system, no tracking, no external web content, and no user-generated content in this build.
+
+Core flow:
+1. Open the app on the Forge tab.
+2. Tap the forge core to earn stardust.
+3. Claim the featured goal after 10 taps.
+4. Buy generator lines and upgrades.
+5. Open Goals, Crew, and Supply tabs to review progression.
+6. When enough total stardust is earned, use Build > Launch Run. A confirmation sheet explains what resets and what persists.
+
+Privacy manifest declares UserDefaults for local game progress only.
+

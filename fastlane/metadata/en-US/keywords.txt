@@ -1,0 +1,2 @@
+idle,incremental,clicker,space,stars,upgrade,casual
+

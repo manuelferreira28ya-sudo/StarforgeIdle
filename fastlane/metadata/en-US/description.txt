@@ -1,0 +1,15 @@
+Starforge Idle is a compact cosmic idle game built around quick taps, steady upgrades, and satisfying long-run growth.
+
+Start by waking the forge, then turn stardust into production lines, boosters, crew unlocks, daily supplies, offline earnings, and launch runs that reset your forge for permanent prism power.
+
+Features:
+- Tap-to-earn forge core
+- Eight generator tiers with milestone boosts
+- Ten upgrade branches for taps, production, and offline earnings
+- Quest chain that guides progression
+- Crew collection with permanent output bonuses
+- Offline earnings and daily streak rewards
+- Prestige launches for permanent prism growth
+
+No ads, no purchases, no tracking, and no account required in this build.
+

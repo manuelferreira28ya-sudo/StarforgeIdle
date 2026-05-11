@@ -107,6 +107,8 @@ enum GameEngine {
             return GoalProgress(current: Double(state.crewIDs.count), target: Double(target))
         case .prisms(let target):
             return GoalProgress(current: Double(state.prisms), target: Double(target))
+        case .prestigeLevel(let target):
+            return GoalProgress(current: Double(state.prestigeLevel), target: Double(target))
         }
     }
 
@@ -146,6 +148,7 @@ enum GameEngine {
     }
 
     static func canClaimDaily(state: GameState, now: Date = Date(), calendar: Calendar = .current) -> Bool {
+        guard hasUnlockedDailySupply(state) else { return false }
         guard let lastDailyClaimAt = state.lastDailyClaimAt else { return true }
         guard now >= lastDailyClaimAt else { return false }
         return !calendar.isDate(lastDailyClaimAt, inSameDayAs: now)
@@ -153,6 +156,10 @@ enum GameEngine {
 
     static func dailyReward(for state: GameState) -> Double {
         dailyReward(for: state, streak: state.dailyStreak)
+    }
+
+    static func hasUnlockedDailySupply(_ state: GameState) -> Bool {
+        state.generators.contains { $0.count > 0 } || state.claimedGoalIDs.contains("wake-the-forge")
     }
 
     static func nextDailyReward(for state: GameState, now: Date = Date(), calendar: Calendar = .current) -> Double {
@@ -228,12 +235,39 @@ enum GameEngine {
     }
 
     private static func productionMultiplier(for generatorID: String, state: GameState) -> Double {
-        GameBalance.upgradeCatalog.reduce(1) { multiplier, upgrade in
+        let upgradeMultiplier = GameBalance.upgradeCatalog.reduce(1) { multiplier, upgrade in
             guard case .generatorProduction(let targetID) = upgrade.effect, targetID == generatorID else {
                 return multiplier
             }
 
             return multiplier + Double(state.upgradeLevel(for: upgrade.id)) * upgrade.effectPerLevel
+        }
+
+        return upgradeMultiplier + milestoneBonus(for: state.generatorCount(for: generatorID))
+    }
+
+    static func milestoneBonus(for count: Int) -> Double {
+        GameBalance.milestoneCounts.reduce(0) { bonus, milestone in
+            count >= milestone ? bonus + milestoneBonusValue(milestone) : bonus
+        }
+    }
+
+    static func nextMilestone(after count: Int) -> Int? {
+        GameBalance.milestoneCounts.first { count < $0 }
+    }
+
+    private static func milestoneBonusValue(_ milestone: Int) -> Double {
+        switch milestone {
+        case 10:
+            return 0.25
+        case 25:
+            return 0.5
+        case 50:
+            return 1
+        case 100:
+            return 2
+        default:
+            return 0
         }
     }
 }

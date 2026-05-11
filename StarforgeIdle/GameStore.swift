@@ -17,11 +17,16 @@ struct UserDefaultsGameStorage: GameStorage {
 
     func load() -> GameState? {
         guard let data = defaults.data(forKey: key) else { return nil }
-        return try? JSONDecoder().decode(GameState.self, from: data)
+        let decoder = JSONDecoder()
+        if let envelope = try? decoder.decode(SavedGameEnvelope.self, from: data) {
+            return envelope.state
+        }
+
+        return try? decoder.decode(GameState.self, from: data)
     }
 
     func save(_ state: GameState) {
-        guard let data = try? JSONEncoder().encode(state) else { return }
+        guard let data = try? JSONEncoder().encode(SavedGameEnvelope(state: state)) else { return }
         defaults.set(data, forKey: key)
     }
 }
@@ -34,6 +39,7 @@ final class GameStore: ObservableObject {
 
     private let storage: GameStorage
     private let feedback = UIImpactFeedbackGenerator(style: .light)
+    private var lastPassiveSaveAt = Date.distantPast
 
     init(storage: GameStorage = UserDefaultsGameStorage(), now: Date = Date()) {
         self.storage = storage
@@ -54,10 +60,14 @@ final class GameStore: ObservableObject {
             if reward >= 1 {
                 bannerMessage = "Offline haul: \(reward.compactGameValue)"
             }
+            save()
         } else {
             _ = GameEngine.tick(state: &state, now: now)
+            if now.timeIntervalSince(lastPassiveSaveAt) >= 15 {
+                save()
+                lastPassiveSaveAt = now
+            }
         }
-        save()
     }
 
     func tapCore() {
@@ -100,6 +110,10 @@ final class GameStore: ObservableObject {
 
     func dismissBanner() {
         bannerMessage = nil
+    }
+
+    func saveProgress() {
+        save()
     }
 
     private func save() {

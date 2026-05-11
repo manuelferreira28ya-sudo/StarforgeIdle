@@ -1,6 +1,19 @@
 import Foundation
 
+struct SavedGameEnvelope: Codable, Equatable {
+    static let currentVersion = 2
+
+    let version: Int
+    let state: GameState
+
+    init(state: GameState, version: Int = SavedGameEnvelope.currentVersion) {
+        self.version = version
+        self.state = state
+    }
+}
+
 struct GameState: Codable, Equatable {
+    var saveVersion: Int
     var stardust: Double
     var totalStardustEarned: Double
     var lifetimeTaps: Int
@@ -17,6 +30,7 @@ struct GameState: Codable, Equatable {
     var createdAt: Date
 
     init(now: Date = Date()) {
+        saveVersion = 2
         stardust = 0
         totalStardustEarned = 0
         lifetimeTaps = 0
@@ -31,6 +45,78 @@ struct GameState: Codable, Equatable {
         lastSavedAt = now
         lastOfflineReward = 0
         createdAt = now
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case saveVersion
+        case stardust
+        case totalStardustEarned
+        case lifetimeTaps
+        case prisms
+        case prestigeLevel
+        case generators
+        case upgrades
+        case claimedGoalIDs
+        case crewIDs
+        case lastDailyClaimAt
+        case dailyStreak
+        case lastSavedAt
+        case lastOfflineReward
+        case createdAt
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        let now = Date()
+        saveVersion = try container.decodeIfPresent(Int.self, forKey: .saveVersion) ?? 1
+        stardust = try container.decodeIfPresent(Double.self, forKey: .stardust) ?? 0
+        totalStardustEarned = try container.decodeIfPresent(Double.self, forKey: .totalStardustEarned) ?? stardust
+        lifetimeTaps = try container.decodeIfPresent(Int.self, forKey: .lifetimeTaps) ?? 0
+        prisms = try container.decodeIfPresent(Int.self, forKey: .prisms) ?? 0
+        prestigeLevel = try container.decodeIfPresent(Int.self, forKey: .prestigeLevel) ?? 0
+        claimedGoalIDs = try container.decodeIfPresent(Set<String>.self, forKey: .claimedGoalIDs) ?? []
+        crewIDs = try container.decodeIfPresent(Set<String>.self, forKey: .crewIDs) ?? []
+        lastDailyClaimAt = try container.decodeIfPresent(Date.self, forKey: .lastDailyClaimAt)
+        dailyStreak = try container.decodeIfPresent(Int.self, forKey: .dailyStreak) ?? 0
+        lastSavedAt = try container.decodeIfPresent(Date.self, forKey: .lastSavedAt) ?? now
+        lastOfflineReward = try container.decodeIfPresent(Double.self, forKey: .lastOfflineReward) ?? 0
+        createdAt = try container.decodeIfPresent(Date.self, forKey: .createdAt) ?? now
+
+        let savedGenerators = try container.decodeIfPresent([GeneratorState].self, forKey: .generators) ?? []
+        let savedUpgrades = try container.decodeIfPresent([UpgradeState].self, forKey: .upgrades) ?? []
+        generators = GameState.mergedGenerators(savedGenerators)
+        upgrades = GameState.mergedUpgrades(savedUpgrades)
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(2, forKey: .saveVersion)
+        try container.encode(stardust, forKey: .stardust)
+        try container.encode(totalStardustEarned, forKey: .totalStardustEarned)
+        try container.encode(lifetimeTaps, forKey: .lifetimeTaps)
+        try container.encode(prisms, forKey: .prisms)
+        try container.encode(prestigeLevel, forKey: .prestigeLevel)
+        try container.encode(generators, forKey: .generators)
+        try container.encode(upgrades, forKey: .upgrades)
+        try container.encode(claimedGoalIDs, forKey: .claimedGoalIDs)
+        try container.encode(crewIDs, forKey: .crewIDs)
+        try container.encodeIfPresent(lastDailyClaimAt, forKey: .lastDailyClaimAt)
+        try container.encode(dailyStreak, forKey: .dailyStreak)
+        try container.encode(lastSavedAt, forKey: .lastSavedAt)
+        try container.encode(lastOfflineReward, forKey: .lastOfflineReward)
+        try container.encode(createdAt, forKey: .createdAt)
+    }
+
+    private static func mergedGenerators(_ saved: [GeneratorState]) -> [GeneratorState] {
+        GameBalance.generatorCatalog.map { definition in
+            saved.first(where: { $0.id == definition.id }) ?? GeneratorState(id: definition.id, count: 0)
+        }
+    }
+
+    private static func mergedUpgrades(_ saved: [UpgradeState]) -> [UpgradeState] {
+        GameBalance.upgradeCatalog.map { definition in
+            saved.first(where: { $0.id == definition.id }) ?? UpgradeState(id: definition.id, level: 0)
+        }
     }
 }
 
@@ -91,6 +177,7 @@ enum GoalMetric: Codable, Equatable {
     case passiveIncome(Double)
     case crewUnlocked(Int)
     case prisms(Int)
+    case prestigeLevel(Int)
 }
 
 enum GoalReward: Codable, Equatable {
@@ -126,6 +213,7 @@ enum GameBalance {
     static let baseOfflineCap: TimeInterval = 8 * 60 * 60
     static let prestigeThreshold: Double = 100_000
     static let dailyBaseReward: Double = 180
+    static let milestoneCounts = [10, 25, 50, 100]
 
     static let generatorCatalog: [GeneratorDefinition] = [
         GeneratorDefinition(
@@ -167,6 +255,46 @@ enum GameBalance {
             baseOutput: 120,
             costGrowth: 1.2,
             unlockAtTotalEarned: 9_000
+        ),
+        GeneratorDefinition(
+            id: "nebula-mine",
+            name: "Nebula Mine",
+            role: "Deep run extraction",
+            symbolName: "circle.hexagongrid.fill",
+            baseCost: 95_000,
+            baseOutput: 920,
+            costGrowth: 1.21,
+            unlockAtTotalEarned: 65_000
+        ),
+        GeneratorDefinition(
+            id: "fusion-array",
+            name: "Fusion Array",
+            role: "High-output reactor grid",
+            symbolName: "atom",
+            baseCost: 720_000,
+            baseOutput: 7_400,
+            costGrowth: 1.22,
+            unlockAtTotalEarned: 450_000
+        ),
+        GeneratorDefinition(
+            id: "comet-foundry",
+            name: "Comet Foundry",
+            role: "Prestige-run accelerator",
+            symbolName: "meteors",
+            baseCost: 5_800_000,
+            baseOutput: 62_000,
+            costGrowth: 1.23,
+            unlockAtTotalEarned: 3_600_000
+        ),
+        GeneratorDefinition(
+            id: "singularity-loom",
+            name: "Singularity Loom",
+            role: "Endgame stardust fabric",
+            symbolName: "circle.dotted.circle",
+            baseCost: 44_000_000,
+            baseOutput: 520_000,
+            costGrowth: 1.24,
+            unlockAtTotalEarned: 26_000_000
         )
     ]
 
@@ -225,6 +353,61 @@ enum GameBalance {
             maxLevel: 4,
             effect: .offlineWindow,
             effectPerLevel: 0.25
+        ),
+        UpgradeDefinition(
+            id: "kiln-tuning",
+            name: "Kiln Tuning",
+            detail: "Boosts Spark Kiln output",
+            symbolName: "slider.horizontal.3",
+            baseCost: 750,
+            costGrowth: 2.05,
+            maxLevel: 8,
+            effect: .generatorProduction("spark-kiln"),
+            effectPerLevel: 0.24
+        ),
+        UpgradeDefinition(
+            id: "orchard-grafting",
+            name: "Orchard Grafting",
+            detail: "Boosts Quantum Orchard output",
+            symbolName: "leaf.fill",
+            baseCost: 18_000,
+            costGrowth: 2.22,
+            maxLevel: 7,
+            effect: .generatorProduction("quantum-orchard"),
+            effectPerLevel: 0.34
+        ),
+        UpgradeDefinition(
+            id: "nebula-survey",
+            name: "Nebula Survey",
+            detail: "Boosts Nebula Mine output",
+            symbolName: "scope",
+            baseCost: 120_000,
+            costGrowth: 2.3,
+            maxLevel: 6,
+            effect: .generatorProduction("nebula-mine"),
+            effectPerLevel: 0.38
+        ),
+        UpgradeDefinition(
+            id: "fusion-cooling",
+            name: "Fusion Cooling",
+            detail: "Boosts Fusion Array output",
+            symbolName: "snowflake",
+            baseCost: 880_000,
+            costGrowth: 2.34,
+            maxLevel: 6,
+            effect: .generatorProduction("fusion-array"),
+            effectPerLevel: 0.42
+        ),
+        UpgradeDefinition(
+            id: "prism-charter",
+            name: "Prism Charter",
+            detail: "Raises all output for long runs",
+            symbolName: "diamond.circle.fill",
+            baseCost: 2_400_000,
+            costGrowth: 2.45,
+            maxLevel: 5,
+            effect: .globalProduction,
+            effectPerLevel: 0.22
         )
     ]
 
@@ -252,6 +435,22 @@ enum GameBalance {
             rarity: "Legendary",
             symbolName: "moon.stars.fill",
             bonusPercentage: 0.12
+        ),
+        CrewDefinition(
+            id: "vesper",
+            name: "Vesper",
+            role: "Milestone planner",
+            rarity: "Epic",
+            symbolName: "map.fill",
+            bonusPercentage: 0.1
+        ),
+        CrewDefinition(
+            id: "lyra",
+            name: "Lyra",
+            role: "Prestige navigator",
+            rarity: "Mythic",
+            symbolName: "paperplane.circle.fill",
+            bonusPercentage: 0.16
         )
     ]
 
@@ -311,6 +510,62 @@ enum GameBalance {
             completeWhen: "player has at least 2 prisms",
             metric: .prisms(2),
             reward: .crew("sol")
+        ),
+        GoalDefinition(
+            id: "kiln-crew",
+            name: "Kiln Crew",
+            description: "Own 10 Spark Kilns",
+            completeWhen: "player owns at least 10 Spark Kilns",
+            metric: .generatorCount("spark-kiln", 10),
+            reward: .stardust(600)
+        ),
+        GoalDefinition(
+            id: "bazaar-network",
+            name: "Bazaar Network",
+            description: "Own 5 Orbital Bazaars",
+            completeWhen: "player owns at least 5 Orbital Bazaars",
+            metric: .generatorCount("orbital-bazaar", 5),
+            reward: .stardust(4_500)
+        ),
+        GoalDefinition(
+            id: "orchard-season",
+            name: "Orchard Season",
+            description: "Own 3 Quantum Orchards",
+            completeWhen: "player owns at least 3 Quantum Orchards",
+            metric: .generatorCount("quantum-orchard", 3),
+            reward: .crew("vesper")
+        ),
+        GoalDefinition(
+            id: "deep-survey",
+            name: "Deep Survey",
+            description: "Own 1 Nebula Mine",
+            completeWhen: "player owns at least 1 Nebula Mine",
+            metric: .generatorCount("nebula-mine", 1),
+            reward: .stardust(18_000)
+        ),
+        GoalDefinition(
+            id: "fusion-ignition",
+            name: "Fusion Ignition",
+            description: "Reach 5.0K stardust/sec",
+            completeWhen: "passive income reaches 5000 stardust per second",
+            metric: .passiveIncome(5_000),
+            reward: .prism(2)
+        ),
+        GoalDefinition(
+            id: "launch-veteran",
+            name: "Launch Veteran",
+            description: "Reach prestige level 2",
+            completeWhen: "player prestige level reaches 2",
+            metric: .prestigeLevel(2),
+            reward: .crew("lyra")
+        ),
+        GoalDefinition(
+            id: "stellar-engine",
+            name: "Stellar Engine",
+            description: "Reach 100.0K stardust/sec",
+            completeWhen: "passive income reaches 100000 stardust per second",
+            metric: .passiveIncome(100_000),
+            reward: .prism(5)
         )
     ]
 }

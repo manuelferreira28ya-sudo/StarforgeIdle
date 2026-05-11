@@ -43,6 +43,8 @@ struct ContentView: View {
         .onChange(of: scenePhase) { phase in
             if phase == .active {
                 store.startSession()
+            } else {
+                store.saveProgress()
             }
         }
     }

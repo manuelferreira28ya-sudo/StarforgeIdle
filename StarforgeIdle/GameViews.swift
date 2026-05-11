@@ -22,6 +22,12 @@ struct ForgeView: View {
                             BannerView(message: message, onDismiss: store.dismissBanner)
                         }
 
+                        if let goal = GameBalance.goalCatalog.first(where: { !store.state.claimedGoalIDs.contains($0.id) }) {
+                            FeaturedGoalPanel(goal: goal, state: store.state) {
+                                store.claimGoal(goal)
+                            }
+                        }
+
                         Button {
                             withAnimation(.spring(response: 0.22, dampingFraction: 0.58)) {
                                 pulse.toggle()
@@ -78,6 +84,7 @@ struct ForgeView: View {
 
 struct UpgradesView: View {
     @ObservedObject var store: GameStore
+    @State private var prestigeOffer: PrestigeOffer?
 
     var body: some View {
         NavigationStack {
@@ -89,7 +96,10 @@ struct UpgradesView: View {
                     VStack(spacing: 14) {
                         SummaryHeader(state: store.state)
                         PrestigePanel(state: store.state) {
-                            store.prestige()
+                            let reward = GameEngine.prestigeReward(for: store.state)
+                            if reward > 0 {
+                                prestigeOffer = PrestigeOffer(reward: reward)
+                            }
                         }
 
                         SectionHeader(title: "Boosters", symbolName: "bolt.fill")
@@ -103,6 +113,12 @@ struct UpgradesView: View {
                 }
             }
             .navigationTitle("Build")
+            .sheet(item: $prestigeOffer) { offer in
+                PrestigeConfirmationView(reward: offer.reward, state: store.state) {
+                    store.prestige()
+                    prestigeOffer = nil
+                }
+            }
         }
     }
 }
@@ -181,6 +197,8 @@ struct SupplyView: View {
                         }
 
                         OfflineSummaryPanel(state: store.state)
+
+                        AboutPanel()
                     }
                     .padding(18)
                 }
@@ -188,6 +206,11 @@ struct SupplyView: View {
             .navigationTitle("Supply")
         }
     }
+}
+
+enum AppLinks {
+    static let privacyPolicy = URL(string: "https://github.com/manuelferreira28ya-sudo/StarforgeIdle/blob/main/docs/privacy.md") ?? URL(fileURLWithPath: "/")
+    static let support = URL(string: "https://github.com/manuelferreira28ya-sudo/StarforgeIdle/blob/main/docs/support.md") ?? URL(fileURLWithPath: "/")
 }
 
 struct SummaryHeader: View {
@@ -282,6 +305,7 @@ struct DailyRewardPanel: View {
     let action: () -> Void
 
     var body: some View {
+        let unlocked = GameEngine.hasUnlockedDailySupply(state)
         let canClaim = GameEngine.canClaimDaily(state: state)
         let reward = canClaim ? GameEngine.nextDailyReward(for: state) : GameEngine.dailyReward(for: state)
 
@@ -292,7 +316,7 @@ struct DailyRewardPanel: View {
                 VStack(alignment: .leading, spacing: 4) {
                     Text("Daily Supply")
                         .font(.headline.weight(.bold))
-                    Text("Streak \(state.dailyStreak) - \(reward.compactGameValue) stardust")
+                    Text(unlocked ? "Streak \(state.dailyStreak) - \(reward.compactGameValue) stardust" : "Unlock after your first line")
                         .font(.caption.weight(.semibold))
                         .foregroundStyle(.white.opacity(0.68))
                 }
@@ -300,7 +324,7 @@ struct DailyRewardPanel: View {
                 Spacer()
 
                 Button(action: action) {
-                    Text(canClaim ? "Claim" : "Done")
+                    Text(canClaim ? "Claim" : unlocked ? "Done" : "Locked")
                         .font(.subheadline.weight(.black))
                         .frame(minWidth: 70)
                 }
@@ -349,6 +373,43 @@ struct OfflineSummaryPanel: View {
     }
 }
 
+struct AboutPanel: View {
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 14) {
+                SymbolBadge(symbolName: "info.circle.fill", color: .ionTeal)
+
+                VStack(alignment: .leading, spacing: 5) {
+                    Text("About")
+                        .font(.headline.weight(.bold))
+                    Text("No ads, no purchases, no tracking, no account required.")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.white.opacity(0.68))
+                }
+
+                Spacer()
+            }
+
+            HStack(spacing: 10) {
+                Link(destination: AppLinks.privacyPolicy) {
+                    Label("Privacy", systemImage: "lock.shield.fill")
+                        .font(.subheadline.weight(.black))
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(PurchaseButtonStyle(isEnabled: true))
+
+                Link(destination: AppLinks.support) {
+                    Label("Support", systemImage: "questionmark.circle.fill")
+                        .font(.subheadline.weight(.black))
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(PurchaseButtonStyle(isEnabled: true))
+            }
+        }
+        .gamePanel()
+    }
+}
+
 struct SectionHeader: View {
     let title: String
     let symbolName: String
@@ -363,6 +424,53 @@ struct SectionHeader: View {
     }
 }
 
+struct FeaturedGoalPanel: View {
+    let goal: GoalDefinition
+    let state: GameState
+    let claimAction: () -> Void
+
+    var body: some View {
+        let progress = GameEngine.progress(for: goal, state: state)
+        let canClaim = GameEngine.canClaimGoal(goal, state: state)
+
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 14) {
+                SymbolBadge(symbolName: canClaim ? "checkmark.seal.fill" : "target", color: canClaim ? .ionTeal : .flareGold)
+
+                VStack(alignment: .leading, spacing: 5) {
+                    Text(goal.name)
+                        .font(.headline.weight(.bold))
+                    Text(goal.description)
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.white.opacity(0.68))
+                    Text(GameEngine.rewardDescription(goal.reward))
+                        .font(.caption2.weight(.black))
+                        .foregroundStyle(.flareGold)
+                }
+
+                Spacer()
+
+                Button(action: claimAction) {
+                    Text("Claim")
+                        .font(.subheadline.weight(.black))
+                        .frame(minWidth: 64)
+                }
+                .buttonStyle(PurchaseButtonStyle(isEnabled: canClaim))
+                .disabled(!canClaim)
+                .accessibilityLabel("Claim featured goal")
+            }
+
+            ProgressView(value: progress.fraction)
+                .tint(canClaim ? .ionTeal : .flareGold)
+
+            Text("\(progress.current.compactGameValue) / \(progress.target.compactGameValue)")
+                .font(.caption2.weight(.bold))
+                .foregroundStyle(.white.opacity(0.62))
+        }
+        .gamePanel()
+    }
+}
+
 struct GeneratorRow: View {
     let definition: GeneratorDefinition
     let state: GameState
@@ -372,6 +480,7 @@ struct GeneratorRow: View {
         let unlocked = GameEngine.isGeneratorUnlocked(definition, state: state)
         let cost = GameEngine.generatorCost(definition, state: state)
         let count = state.generatorCount(for: definition.id)
+        let nextMilestone = GameEngine.nextMilestone(after: count)
 
         HStack(spacing: 14) {
             SymbolBadge(symbolName: definition.symbolName, color: unlocked ? .ionTeal : .white.opacity(0.35))
@@ -393,6 +502,16 @@ struct GeneratorRow: View {
                 Text("+\((definition.baseOutput * Double(max(count, 1))).compactGameValue)/sec base")
                     .font(.caption2.weight(.semibold))
                     .foregroundStyle(.ionTeal)
+
+                if let nextMilestone {
+                    Text("Milestone at x\(nextMilestone)")
+                        .font(.caption2.weight(.bold))
+                        .foregroundStyle(.white.opacity(0.52))
+                } else if count >= GameBalance.milestoneCounts.last ?? 0 {
+                    Text("All milestones active")
+                        .font(.caption2.weight(.bold))
+                        .foregroundStyle(.flareGold)
+                }
             }
 
             Button(action: buyAction) {
@@ -406,6 +525,66 @@ struct GeneratorRow: View {
         }
         .gamePanel()
         .opacity(unlocked ? 1 : 0.58)
+    }
+}
+
+struct PrestigeOffer: Identifiable {
+    let id = UUID()
+    let reward: Int
+}
+
+struct PrestigeConfirmationView: View {
+    @Environment(\.dismiss) private var dismiss
+    let reward: Int
+    let state: GameState
+    let confirm: () -> Void
+
+    var body: some View {
+        NavigationStack {
+            ZStack {
+                LinearGradient(colors: [.spaceBlack, .forgeBlue.opacity(0.8)], startPoint: .top, endPoint: .bottom)
+                    .ignoresSafeArea()
+
+                VStack(alignment: .leading, spacing: 16) {
+                    SymbolBadge(symbolName: "paperplane.fill", color: .cometPink)
+
+                    Text("Launch this run?")
+                        .font(.title2.weight(.black))
+
+                    Text("You will reset stardust, generators, upgrades, goals, and taps. Crew and prisms stay with you.")
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(.white.opacity(0.72))
+                        .fixedSize(horizontal: false, vertical: true)
+
+                    HStack(spacing: 10) {
+                        StatPill(title: "new prisms", value: "+\(reward)", symbolName: "diamond.fill")
+                        StatPill(title: "kept crew", value: "\(state.crewIDs.count)", symbolName: "person.3.fill")
+                    }
+
+                    Spacer()
+
+                    Button(action: confirm) {
+                        Text("Launch Run")
+                            .font(.headline.weight(.black))
+                            .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(PurchaseButtonStyle(isEnabled: true))
+
+                    Button {
+                        dismiss()
+                    } label: {
+                        Text("Keep Building")
+                            .font(.headline.weight(.bold))
+                            .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(PurchaseButtonStyle(isEnabled: false))
+                }
+                .padding(18)
+            }
+            .navigationTitle("Confirm")
+            .navigationBarTitleDisplayMode(.inline)
+        }
+        .presentationDetents([.medium])
     }
 }
 
