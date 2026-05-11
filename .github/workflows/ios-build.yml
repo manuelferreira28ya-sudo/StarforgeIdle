@@ -14,7 +14,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Show Swift version
         run: swift --version
@@ -28,7 +28,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Show Xcode version
         run: xcodebuild -version
@@ -54,4 +54,3 @@ jobs:
         with:
           name: StarforgeIdle-simulator-app
           path: build/DerivedData/Build/Products/Debug-iphonesimulator/StarforgeIdle-simulator.zip
-
