@@ -17,14 +17,14 @@ struct ContentView: View {
                     Label("Build", systemImage: "hammer.fill")
                 }
 
+            RPGView(store: store)
+                .tabItem {
+                    Label("RPG", systemImage: "shield.fill")
+                }
+
             GoalsView(store: store)
                 .tabItem {
                     Label("Goals", systemImage: "checklist.checked")
-                }
-
-            CrewView(store: store)
-                .tabItem {
-                    Label("Crew", systemImage: "person.3.fill")
                 }
 
             SupplyView(store: store)
@@ -65,6 +65,10 @@ struct PreviewGameStorage: GameStorage {
         state.setGeneratorCount(3, for: "drone-dock")
         state.setUpgradeLevel(2, for: "tap-rig")
         state.crewIDs = ["nova"]
+        state.highestStageCleared = 12
+        state.alloy = 900
+        state.relicDust = 24
+        state.sectorMedals = 1
         return state
     }
 

@@ -170,5 +170,156 @@ final class GameEngineTests: XCTestCase {
         XCTAssertTrue(GameBalance.generatorCatalog.allSatisfy { definition in
             state.generators.contains { $0.id == definition.id }
         })
+        XCTAssertEqual(state.highestStageCleared, 0)
+        XCTAssertEqual(state.rpgHeroes.filter(\.isUnlocked).count, 3)
+        XCTAssertTrue(state.rpgEquipmentState(for: "spark-saber")?.isOwned == true)
+    }
+
+    func testRPGCampaignHasOneHundredStagesAcrossTenSectors() {
+        XCTAssertEqual(GameBalance.rpgStageCatalog.count, 100)
+        XCTAssertEqual(GameBalance.rpgStageCatalog.first?.number, 1)
+        XCTAssertEqual(GameBalance.rpgStageCatalog.last?.number, 100)
+        XCTAssertEqual(GameBalance.rpgStageCatalog.filter(\.isBoss).count, 10)
+        XCTAssertEqual(GameBalance.rpgStageCatalog.last?.sector, 10)
+    }
+
+    func testRPGStageVictoryAppliesRewardsAndUnlocksLoot() {
+        var state = GameState(now: Date(timeIntervalSince1970: 0))
+
+        let report = GameEngine.attemptNextRPGStage(state: &state)
+
+        XCTAssertTrue(report.victory)
+        XCTAssertEqual(state.highestStageCleared, 1)
+        XCTAssertGreaterThan(state.alloy, 0)
+        XCTAssertGreaterThan(state.rpgHeroes.reduce(0) { $0 + $1.experience }, 0)
+        XCTAssertNotNil(state.lastCombatReport)
+    }
+
+    func testRPGBossClearsAwardSectorMedal() {
+        var state = GameState(now: Date(timeIntervalSince1970: 0))
+        state.highestStageCleared = 9
+        state.alloy = 100_000
+        state.rpgHeroes = state.rpgHeroes.map { hero in
+            var upgraded = hero
+            if upgraded.isUnlocked {
+                upgraded.level = 20
+                upgraded.rank = 2
+            }
+            return upgraded
+        }
+
+        let report = GameEngine.attemptNextRPGStage(state: &state)
+
+        XCTAssertTrue(report.victory)
+        XCTAssertEqual(state.highestStageCleared, 10)
+        XCTAssertEqual(state.sectorMedals, 1)
+    }
+
+    func testRPGIdleRewardScalesWithClearedStage() {
+        var state = GameState(now: Date(timeIntervalSince1970: 0))
+        state.highestStageCleared = 12
+
+        let reward = GameEngine.rpgIdleReward(for: state, elapsed: 3600)
+
+        XCTAssertGreaterThan(reward.alloy, 0)
+        XCTAssertGreaterThan(reward.heroXP, 0)
+        XCTAssertGreaterThan(reward.stardust, 0)
+    }
+
+    func testRPGHeroLevelConsumesAlloyAndXP() throws {
+        var state = GameState(now: Date(timeIntervalSince1970: 0))
+        var hero = try XCTUnwrap(state.rpgHero(for: "forge-captain"))
+        hero.experience = GameEngine.rpgHeroXPRequirement(hero)
+        state.setRPGHero(hero)
+        state.alloy = GameEngine.rpgHeroLevelCost(hero)
+
+        XCTAssertTrue(GameEngine.levelRPGHero("forge-captain", state: &state))
+        XCTAssertEqual(state.rpgHero(for: "forge-captain")?.level, 2)
+        XCTAssertEqual(state.alloy, 0, accuracy: 0.001)
+    }
+
+    func testRPGEquipmentCanBeEquippedAndUpgraded() throws {
+        var state = GameState(now: Date(timeIntervalSince1970: 0))
+        let equipment = try XCTUnwrap(state.rpgEquipmentState(for: "spark-saber"))
+        state.alloy = GameEngine.rpgEquipmentUpgradeCost(equipment)
+
+        XCTAssertTrue(GameEngine.equipRPGEquipment("spark-saber", to: "ion-ranger", state: &state))
+        XCTAssertEqual(state.equippedItemID(heroID: "ion-ranger", slot: .weapon), "spark-saber")
+        XCTAssertTrue(GameEngine.upgradeRPGEquipment("spark-saber", state: &state))
+        XCTAssertEqual(state.rpgEquipmentState(for: "spark-saber")?.level, 2)
+    }
+
+    func testRPGEquipmentCannotBeDuplicatedAcrossHeroes() {
+        var state = GameState(now: Date(timeIntervalSince1970: 0))
+
+        XCTAssertTrue(GameEngine.equipRPGEquipment("spark-saber", to: "forge-captain", state: &state))
+        XCTAssertTrue(GameEngine.equipRPGEquipment("spark-saber", to: "ion-ranger", state: &state))
+
+        XCTAssertNil(state.equippedItemID(heroID: "forge-captain", slot: .weapon))
+        XCTAssertEqual(state.equippedItemID(heroID: "ion-ranger", slot: .weapon), "spark-saber")
+    }
+
+    func testFailedRPGStageDoesNotCreateClickFarmReward() {
+        var state = GameState(now: Date(timeIntervalSince1970: 0))
+        state.highestStageCleared = 99
+        let alloyBefore = state.alloy
+
+        let report = GameEngine.attemptNextRPGStage(state: &state)
+
+        XCTAssertFalse(report.victory)
+        XCTAssertEqual(state.highestStageCleared, 99)
+        XCTAssertEqual(state.alloy, alloyBefore, accuracy: 0.001)
+        XCTAssertTrue(report.reward.isEmpty)
+    }
+
+    func testRPGGoalRewardUnlocksEquipment() throws {
+        var state = GameState(now: Date(timeIntervalSince1970: 0))
+        state.highestStageCleared = 10
+        let goal = try XCTUnwrap(GameBalance.goalCatalog.first(where: { $0.id == "first-boss" }))
+
+        XCTAssertFalse(state.rpgEquipmentState(for: "gravity-core")?.isOwned == true)
+        XCTAssertTrue(GameEngine.claimGoal(goal, state: &state))
+        XCTAssertTrue(state.rpgEquipmentState(for: "gravity-core")?.isOwned == true)
+    }
+
+    func testMalformedRPGLoadoutsAreSanitizedOnDecode() throws {
+        let json = """
+        {
+          "saveVersion": 3,
+          "stardust": 0,
+          "totalStardustEarned": 0,
+          "lifetimeTaps": 0,
+          "prisms": 0,
+          "prestigeLevel": 0,
+          "generators": [],
+          "upgrades": [],
+          "claimedGoalIDs": [],
+          "crewIDs": [],
+          "lastSavedAt": 0,
+          "lastOfflineReward": 0,
+          "createdAt": 0,
+          "alloy": 0,
+          "relicDust": 0,
+          "sectorMedals": 0,
+          "highestStageCleared": 0,
+          "rpgHeroes": [],
+          "rpgEquipment": [],
+          "rpgLoadouts": [
+            {"heroID": "forge-captain", "slot": "weapon", "itemID": "spark-saber"},
+            {"heroID": "ion-ranger", "slot": "weapon", "itemID": "spark-saber"},
+            {"heroID": "unknown-hero", "slot": "weapon", "itemID": "spark-saber"},
+            {"heroID": "medtech", "slot": "armor", "itemID": "plasma-rifle"}
+          ],
+          "activeHeroIDs": ["forge-captain", "ion-ranger", "medtech"],
+          "lastRPGIdleReward": {"alloy":0,"heroXP":0,"relicDust":0,"stardust":0,"sectorMedals":0,"itemIDs":[]}
+        }
+        """.data(using: .utf8)!
+
+        let state = try JSONDecoder().decode(GameState.self, from: json)
+        let equippedSparkSabers = state.rpgLoadouts.filter { $0.itemID == "spark-saber" }
+
+        XCTAssertEqual(equippedSparkSabers.count, 1)
+        XCTAssertFalse(state.rpgLoadouts.contains { $0.heroID == "unknown-hero" })
+        XCTAssertNil(state.equippedItemID(heroID: "medtech", slot: .armor))
     }
 }

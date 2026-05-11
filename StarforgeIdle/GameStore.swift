@@ -94,6 +94,53 @@ final class GameStore: ObservableObject {
         save()
     }
 
+    func fightNextRPGStage() {
+        let report = GameEngine.attemptNextRPGStage(state: &state)
+        if report.victory {
+            bannerMessage = "Stage \(report.stage) clear: \(GameEngine.rpgRewardDescription(report.reward))"
+        } else {
+            bannerMessage = "Stage \(report.stage) failed. \(report.advice)"
+        }
+        save()
+    }
+
+    func levelRPGHero(_ hero: RPGHeroState) {
+        guard GameEngine.levelRPGHero(hero.id, state: &state) else { return }
+        let name = GameBalance.rpgHeroCatalog.first(where: { $0.id == hero.id })?.name ?? "Hero"
+        bannerMessage = "\(name) leveled up"
+        save()
+    }
+
+    func upgradeRPGEquipment(_ equipment: RPGEquipmentState) {
+        guard GameEngine.upgradeRPGEquipment(equipment.id, state: &state) else { return }
+        let name = GameBalance.rpgEquipmentCatalog.first(where: { $0.id == equipment.id })?.name ?? "Item"
+        bannerMessage = "\(name) upgraded"
+        save()
+    }
+
+    func equipRPGEquipment(_ equipment: RPGEquipmentDefinition, to hero: RPGHeroState) {
+        guard GameEngine.equipRPGEquipment(equipment.id, to: hero.id, state: &state) else { return }
+        let heroName = GameBalance.rpgHeroCatalog.first(where: { $0.id == hero.id })?.name ?? "Hero"
+        bannerMessage = "\(equipment.name) equipped to \(heroName)"
+        save()
+    }
+
+    func toggleActiveRPGHero(_ hero: RPGHeroState) {
+        guard hero.isUnlocked else { return }
+        var active = state.activeHeroIDs
+        if active.contains(hero.id) {
+            guard active.count > 1 else { return }
+            active.removeAll { $0 == hero.id }
+        } else if active.count < 3 {
+            active.append(hero.id)
+        } else {
+            active.removeFirst()
+            active.append(hero.id)
+        }
+        guard GameEngine.setActiveRPGHeroes(active, state: &state) else { return }
+        save()
+    }
+
     func claimDaily(now: Date = Date()) {
         let reward = GameEngine.claimDaily(state: &state, now: now)
         guard reward > 0 else { return }

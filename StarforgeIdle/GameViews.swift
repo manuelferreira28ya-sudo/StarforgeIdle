@@ -208,6 +208,425 @@ struct SupplyView: View {
     }
 }
 
+struct RPGView: View {
+    @ObservedObject var store: GameStore
+
+    var body: some View {
+        NavigationStack {
+            ZStack {
+                LinearGradient(colors: [.spaceBlack, .forgeBlue.opacity(0.78)], startPoint: .topLeading, endPoint: .bottomTrailing)
+                    .ignoresSafeArea()
+
+                ScrollView {
+                    VStack(spacing: 14) {
+                        SummaryHeader(state: store.state)
+                        RPGResourceStrip(state: store.state)
+                        RPGCampaignPanel(state: store.state) {
+                            store.fightNextRPGStage()
+                        }
+
+                        if let report = store.state.lastCombatReport {
+                            CombatReportPanel(report: report)
+                        }
+
+                        RPGHeroSection(store: store)
+                        CrewCollectionSection(state: store.state)
+                        RPGEquipmentSection(store: store)
+                        EnemySectorSection()
+                    }
+                    .padding(18)
+                }
+            }
+            .navigationTitle("Void Frontier")
+        }
+    }
+}
+
+struct CrewCollectionSection: View {
+    let state: GameState
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            SectionHeader(title: "Crew Collection", symbolName: "person.crop.circle.badge.checkmark")
+
+            LazyVGrid(columns: [GridItem(.adaptive(minimum: 156), spacing: 12)], spacing: 12) {
+                ForEach(GameBalance.crewCatalog) { crew in
+                    CrewCard(crew: crew, isUnlocked: state.crewIDs.contains(crew.id))
+                }
+            }
+        }
+    }
+}
+
+struct RPGResourceStrip: View {
+    let state: GameState
+
+    var body: some View {
+        HStack(spacing: 10) {
+            StatPill(title: "alloy", value: state.alloy.compactGameValue, symbolName: "hexagon.fill")
+            StatPill(title: "dust", value: state.relicDust.compactGameValue, symbolName: "sparkles")
+            StatPill(title: "medals", value: "\(state.sectorMedals)", symbolName: "medal.fill")
+        }
+        .gamePanel()
+    }
+}
+
+struct RPGCampaignPanel: View {
+    let state: GameState
+    let fightAction: () -> Void
+
+    var body: some View {
+        let nextStage = GameEngine.nextRPGStage(for: state)
+        let progress = Double(state.highestStageCleared) / Double(GameBalance.maxRPGStage)
+        let squadPower = GameEngine.rpgSquadPower(for: state)
+
+        VStack(alignment: .leading, spacing: 14) {
+            HStack(alignment: .top, spacing: 14) {
+                RPGAssetBadge(assetName: nextStage?.iconAssetName ?? "RPGIconKey", tint: .flareGold)
+
+                VStack(alignment: .leading, spacing: 5) {
+                    Text("Void Frontier")
+                        .font(.headline.weight(.black))
+                    Text("Stage \(state.highestStageCleared) / \(GameBalance.maxRPGStage)")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.white.opacity(0.68))
+                    Text("Squad \(squadPower.compactGameValue) power")
+                        .font(.caption2.weight(.black))
+                        .foregroundStyle(Color.ionTeal)
+                }
+
+                Spacer()
+
+                Button(action: fightAction) {
+                    Text(nextStage == nil ? "Clear" : nextStage?.isBoss == true ? "Boss" : "Fight")
+                        .font(.subheadline.weight(.black))
+                        .frame(minWidth: 70)
+                }
+                .buttonStyle(PurchaseButtonStyle(isEnabled: nextStage != nil))
+                .disabled(nextStage == nil)
+                .accessibilityLabel("Fight next RPG stage")
+            }
+
+            ProgressView(value: progress)
+                .tint(Color.flareGold)
+
+            if let nextStage {
+                HStack(spacing: 10) {
+                    StageStatPill(title: nextStage.enemyName, value: nextStage.enemyPower.compactGameValue, assetName: nextStage.iconAssetName)
+                    StageStatPill(title: nextStage.mechanic, value: "S\(nextStage.number)", assetName: nextStage.isBoss ? "RPGIconKey" : "RPGIconBattle")
+                }
+                Text(GameEngine.rpgRewardDescription(nextStage.reward))
+                    .font(.caption2.weight(.bold))
+                    .foregroundStyle(.white.opacity(0.62))
+                    .fixedSize(horizontal: false, vertical: true)
+            } else {
+                Text("Stage 100 cleared. Frontier Echoes can expand from here.")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.white.opacity(0.68))
+            }
+        }
+        .gamePanel()
+    }
+}
+
+struct StageStatPill: View {
+    let title: String
+    let value: String
+    let assetName: String
+
+    var body: some View {
+        HStack(spacing: 8) {
+            RPGAssetBadge(assetName: assetName, tint: .ionTeal, size: 34)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(value)
+                    .font(.headline.weight(.black))
+                Text(title)
+                    .font(.caption2.weight(.semibold))
+                    .lineLimit(2)
+                    .foregroundStyle(.white.opacity(0.62))
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(10)
+        .background(Color.white.opacity(0.07), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+    }
+}
+
+struct CombatReportPanel: View {
+    let report: RPGCombatReport
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 14) {
+                RPGAssetBadge(assetName: report.victory ? "RPGIconChest" : "RPGIconBattle", tint: report.victory ? .flareGold : .cometPink)
+
+                VStack(alignment: .leading, spacing: 5) {
+                    Text(report.victory ? "Stage \(report.stage) Cleared" : "Stage \(report.stage) Failed")
+                        .font(.headline.weight(.bold))
+                    Text(report.enemyName)
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.white.opacity(0.68))
+                }
+
+                Spacer()
+            }
+
+            HStack(spacing: 10) {
+                StatPill(title: "squad", value: report.squadPower.compactGameValue, symbolName: "person.3.fill")
+                StatPill(title: "enemy", value: report.enemyPower.compactGameValue, symbolName: "shield.fill")
+            }
+
+            Text(report.advice)
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.white.opacity(0.72))
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .gamePanel()
+    }
+}
+
+struct RPGHeroSection: View {
+    @ObservedObject var store: GameStore
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            SectionHeader(title: "Squad", symbolName: "person.3.fill")
+
+            ForEach(GameBalance.rpgHeroCatalog) { definition in
+                if let hero = store.state.rpgHero(for: definition.id) {
+                    RPGHeroRow(definition: definition, hero: hero, state: store.state) {
+                        store.toggleActiveRPGHero(hero)
+                    } levelAction: {
+                        store.levelRPGHero(hero)
+                    }
+                }
+            }
+        }
+    }
+}
+
+struct RPGHeroRow: View {
+    let definition: RPGHeroDefinition
+    let hero: RPGHeroState
+    let state: GameState
+    let activeAction: () -> Void
+    let levelAction: () -> Void
+
+    var body: some View {
+        let isActive = state.activeHeroIDs.contains(hero.id)
+        let canLevel = GameEngine.canLevelRPGHero(hero, state: state)
+        let xpProgress = min(hero.experience / max(GameEngine.rpgHeroXPRequirement(hero), 1), 1)
+
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 14) {
+                RPGAssetBadge(assetName: definition.iconAssetName, tint: hero.isUnlocked ? .flareGold : .white.opacity(0.35))
+
+                VStack(alignment: .leading, spacing: 5) {
+                    HStack(spacing: 8) {
+                        Text(definition.name)
+                            .font(.headline.weight(.bold))
+                        if isActive {
+                            Text("Active")
+                                .font(.caption2.weight(.black))
+                                .foregroundStyle(Color.spaceBlack)
+                                .padding(.vertical, 3)
+                                .padding(.horizontal, 6)
+                                .background(Color.ionTeal, in: Capsule())
+                        }
+                    }
+                    Text(hero.isUnlocked ? "\(definition.className) · \(definition.skillName)" : "Unlock at stage \(definition.unlockStage)")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.white.opacity(0.68))
+                    Text(hero.isUnlocked ? "Power \(GameEngine.rpgPower(for: hero, state: state).compactGameValue) · Rank \(hero.rank)" : definition.role)
+                        .font(.caption2.weight(.black))
+                        .foregroundStyle(Color.flareGold)
+                }
+
+                Spacer()
+
+                Button(action: activeAction) {
+                    Image(systemName: isActive ? "checkmark.circle.fill" : "plus.circle.fill")
+                        .font(.title3.weight(.black))
+                        .frame(width: 44, height: 44)
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(hero.isUnlocked ? Color.ionTeal : Color.white.opacity(0.35))
+                .disabled(!hero.isUnlocked)
+                .accessibilityLabel(isActive ? "Remove \(definition.name) from active squad" : "Add \(definition.name) to active squad")
+            }
+
+            if hero.isUnlocked {
+                ProgressView(value: xpProgress)
+                    .tint(Color.ionTeal)
+
+                HStack {
+                    Text("Level \(hero.level) · XP \(hero.experience.compactGameValue) / \(GameEngine.rpgHeroXPRequirement(hero).compactGameValue)")
+                        .font(.caption2.weight(.bold))
+                        .foregroundStyle(.white.opacity(0.62))
+                    Spacer()
+                    Button(action: levelAction) {
+                        Text(canLevel ? GameEngine.rpgHeroLevelCost(hero).compactGameValue : "Train")
+                            .font(.subheadline.weight(.black))
+                            .frame(minWidth: 70)
+                    }
+                    .buttonStyle(PurchaseButtonStyle(isEnabled: canLevel))
+                    .disabled(!canLevel)
+                }
+            }
+        }
+        .gamePanel()
+        .opacity(hero.isUnlocked ? 1 : 0.54)
+    }
+}
+
+struct RPGEquipmentSection: View {
+    @ObservedObject var store: GameStore
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            SectionHeader(title: "Armory", symbolName: "bag.fill")
+
+            ForEach(GameBalance.rpgEquipmentCatalog) { definition in
+                if let equipment = store.state.rpgEquipmentState(for: definition.id) {
+                    RPGEquipmentRow(definition: definition, equipment: equipment, state: store.state) {
+                        store.upgradeRPGEquipment(equipment)
+                    } equipAction: { hero in
+                        store.equipRPGEquipment(definition, to: hero)
+                    }
+                }
+            }
+        }
+    }
+}
+
+struct RPGEquipmentRow: View {
+    let definition: RPGEquipmentDefinition
+    let equipment: RPGEquipmentState
+    let state: GameState
+    let upgradeAction: () -> Void
+    let equipAction: (RPGHeroState) -> Void
+
+    var body: some View {
+        let canUpgrade = GameEngine.canUpgradeRPGEquipment(equipment, state: state)
+        let availableHeroes = GameEngine.activeRPGHeroStates(for: state)
+        let equippedHero = state.rpgLoadouts.first(where: { $0.itemID == equipment.id })?.heroID
+        let equippedName = equippedHero.flatMap { id in GameBalance.rpgHeroCatalog.first(where: { $0.id == id })?.name }
+
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 14) {
+                RPGAssetBadge(assetName: definition.iconAssetName, tint: equipment.isOwned ? rarityColor(definition.rarity) : .white.opacity(0.35))
+
+                VStack(alignment: .leading, spacing: 5) {
+                    Text(definition.name)
+                        .font(.headline.weight(.bold))
+                    Text(equipment.isOwned ? "\(definition.slot.title) · \(definition.rarity.title) · L\(equipment.level)" : "Unlock at stage \(definition.unlockStage)")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.white.opacity(0.68))
+                    Text(equippedName.map { "Equipped: \($0)" } ?? definition.detail)
+                        .font(.caption2.weight(.black))
+                        .foregroundStyle(Color.flareGold)
+                }
+
+                Spacer()
+
+                Menu {
+                    ForEach(availableHeroes) { hero in
+                        if let heroDefinition = GameBalance.rpgHeroCatalog.first(where: { $0.id == hero.id }) {
+                            Button(heroDefinition.name) {
+                                equipAction(hero)
+                            }
+                        }
+                    }
+                } label: {
+                    Image(systemName: "person.crop.circle.badge.plus")
+                        .font(.title3.weight(.black))
+                        .frame(width: 44, height: 44)
+                }
+                .disabled(!equipment.isOwned)
+                .foregroundStyle(equipment.isOwned ? Color.ionTeal : Color.white.opacity(0.35))
+            }
+
+            if equipment.isOwned {
+                HStack {
+                    Text("+\(definition.attackBonus.compactGameValue) atk · +\(definition.hpBonus.compactGameValue) hp · +\(Int(definition.bossBonus * 100))% boss")
+                        .font(.caption2.weight(.bold))
+                        .foregroundStyle(.white.opacity(0.62))
+                    Spacer()
+                    Button(action: upgradeAction) {
+                        Text(canUpgrade ? GameEngine.rpgEquipmentUpgradeCost(equipment).compactGameValue : "Upgrade")
+                            .font(.subheadline.weight(.black))
+                            .frame(minWidth: 78)
+                    }
+                    .buttonStyle(PurchaseButtonStyle(isEnabled: canUpgrade))
+                    .disabled(!canUpgrade)
+                }
+            }
+        }
+        .gamePanel()
+        .opacity(equipment.isOwned ? 1 : 0.5)
+    }
+
+    private func rarityColor(_ rarity: RPGRarity) -> Color {
+        switch rarity {
+        case .common:
+            return .white
+        case .uncommon:
+            return .ionTeal
+        case .rare:
+            return .flareGold
+        case .epic:
+            return .cometPink
+        case .prototype:
+            return Color(red: 0.75, green: 0.58, blue: 1.0)
+        }
+    }
+}
+
+struct EnemySectorSection: View {
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            SectionHeader(title: "Enemy Sectors", symbolName: "map.fill")
+
+            LazyVGrid(columns: [GridItem(.adaptive(minimum: 152), spacing: 12)], spacing: 12) {
+                ForEach(GameBalance.rpgEnemyFamilies) { family in
+                    VStack(alignment: .leading, spacing: 10) {
+                        RPGAssetBadge(assetName: family.iconAssetName, tint: .flareGold)
+                        Text(family.name)
+                            .font(.headline.weight(.bold))
+                            .lineLimit(2)
+                        Text(family.mechanic)
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(.white.opacity(0.66))
+                    }
+                    .frame(maxWidth: .infinity, minHeight: 128, alignment: .topLeading)
+                    .gamePanel()
+                }
+            }
+        }
+    }
+}
+
+struct RPGAssetBadge: View {
+    let assetName: String
+    let tint: Color
+    var size: CGFloat = 44
+
+    var body: some View {
+        Image(assetName)
+            .interpolation(.none)
+            .resizable()
+            .scaledToFit()
+            .padding(size * 0.22)
+            .frame(width: size, height: size)
+            .background(tint.opacity(0.18), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .stroke(tint.opacity(0.36), lineWidth: 1)
+            )
+            .accessibilityHidden(true)
+    }
+}
+
 enum AppLinks {
     static let privacyPolicy = URL(string: "https://github.com/manuelferreira28ya-sudo/StarforgeIdle/blob/main/docs/privacy.md") ?? URL(fileURLWithPath: "/")
     static let support = URL(string: "https://github.com/manuelferreira28ya-sudo/StarforgeIdle/blob/main/docs/support.md") ?? URL(fileURLWithPath: "/")
